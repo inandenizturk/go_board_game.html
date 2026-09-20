@@ -1,4 +1,4 @@
-<img width="567" height="789" alt="Screenshot 2026-09-20 at 20 24 52" src="https://github.com/user-attachments/assets/5c617cff-ca7e-4976-99c4-fb887a27ce6a" />
+
 
 # GoBoard Arena — Decentralized Strategy Engine
 
