@@ -1,4 +1,5 @@
 <img width="567" height="789" alt="Screenshot 2026-09-20 at 20 24 52" src="https://github.com/user-attachments/assets/5c617cff-ca7e-4976-99c4-fb887a27ce6a" />
+
 # GoBoard Arena — Decentralized Strategy Engine
 
 GoBoard Arena is an open-source strategy platform that merges the complete rule engine of ancient Go (Weiqi / Baduk) with modern Web3 technologies and a lightweight 2D Canvas rendering architecture. It operates entirely on native HTML5 Canvas, Vanilla JavaScript, and Solana Web3.js infrastructure with zero external game framework dependencies.
