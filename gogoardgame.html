@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GoBoard Arena — Decentralized Strategy Engine</title>
+<script src="https://unpkg.com/@solana/web3.js@1.98.4/lib/index.iife.min.js"></script>
+<style>
+:root {
+  --bg-gradient: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  --container-bg: rgba(255, 255, 255, 0.08);
+  --container-border: rgba(255, 255, 255, 0.2);
+  --text-color: #f8fafc;
+  --button-bg: linear-gradient(45deg, #0284c7, #0369a1);
+  --board-wood: #dcb35c;
+  --board-line: #452b14;
+}
+[data-theme="dark"] {
+  --bg-gradient: linear-gradient(135deg, #18181b 0%, #09090b 100%);
+  --container-bg: rgba(255, 255, 255, 0.05);
+  --button-bg: linear-gradient(45deg, #3f3f46, #27272a);
+}
+[data-theme="slate"] {
+  --bg-gradient: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+  --board-wood: #c89b3c;
+  --button-bg: linear-gradient(45deg, #6366f1, #4f46e5);
+}
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg-gradient);
+  background-attachment: fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--text-color);
+  padding: 10px;
+  box-sizing: border-box;
+}
+.game-container {
+  background: var(--container-bg);
+  backdrop-filter: blur(20px);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  border: 1px solid var(--container-border);
+  max-width: 95vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.game-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+h1 { font-size: 1.8em; margin: 0; font-weight: 700; letter-spacing: 0.5px; }
+.game-stats {
+  width: 100%;
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 16px;
+  font-weight: 600;
+  font-size: 0.95em;
+  background: rgba(0,0,0,0.25);
+  padding: 10px 0;
+  border-radius: 12px;
+}
+.controls {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+button {
+  background: var(--button-bg);
+  border: none;
+  color: white;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+button:hover { transform: translateY(-2px); opacity: 0.95; }
+button:active { transform: translateY(0); }
+button.active { outline: 2px solid #38bdf8; }
+.wallet-section {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+.wallet-address { font-family: monospace; font-size: 0.85em; opacity: 0.85; }
+.board-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+#goBoard {
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+  cursor: crosshair;
+}
+.particle-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  border-radius: 8px;
+}
+.status {
+  text-align: center;
+  font-size: 1.1em;
+  font-weight: 600;
+  margin-bottom: 10px;
+  min-height: 24px;
+}
+.multiplayer-section {
+  width: 100%;
+  background: rgba(0,0,0,0.3);
+  padding: 14px;
+  border-radius: 12px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(255,255,255,0.1);
+  display: none;
+  box-sizing: border-box;
+  text-align: center;
+}
+@media (max-width: 600px) {
+  .game-container { padding: 14px; width: 100%; }
+  h1 { font-size: 1.4em; }
+  .controls button { padding: 8px 12px; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+<div class="game-container">
+  <div class="game-header">
+    <h1>⚪ GoBoard Arena ⚫</h1>
+    <button onclick="toggleTheme()">🎨 Theme</button>
+  </div>
+
+  <div class="wallet-section">
+    <div id="walletStatus">Profile: Guest (Local)</div>
+    <div id="walletAddress" class="wallet-address" style="display: none;"></div>
+    <button id="walletButton" onclick="toggleWallet()">Link Web3 Profile</button>
+  </div>
+
+  <div class="controls">
+    <button onclick="setBoardSize(9)" class="active" id="btn-size-9">9×9 Speed</button>
+    <button onclick="setBoardSize(13)" id="btn-size-13">13×13 Medium</button>
+    <button onclick="setBoardSize(19)" id="btn-size-19">19×19 Pro</button>
+  </div>
+
+  <div class="game-stats">
+    <div>Turn: <span id="currentTurnText" style="color: #38bdf8;">Black</span></div>
+    <div>Captures (B): <span id="blackCaptures">0</span></div>
+    <div>Captures (W): <span id="whiteCaptures">0</span></div>
+    <div>Moves: <span id="moveCount">0</span></div>
+  </div>
+
+  <div class="multiplayer-section" id="multiplayerSection">
+    <div style="font-weight: 700; margin-bottom: 8px; color: #f59e0b;" id="roomInfo">🎮 Local PvP Mode</div>
+    <button onclick="createRoom()">🏠 Create Arena</button>
+    <button onclick="joinRoom()">🚪 Join Arena</button>
+  </div>
+
+  <div class="board-wrapper">
+    <canvas id="goBoard"></canvas>
+    <canvas id="particleCanvas" class="particle-canvas"></canvas>
+  </div>
+
+  <div class="status" id="gameStatus">Black to play. Tap an intersection.</div>
+
+  <div class="controls">
+    <button onclick="passTurn()">Pass Turn</button>
+    <button onclick="resetGame()">New Match</button>
+    <button onclick="toggleMultiplayer()" id="mpToggleBtn">PvP Arena</button>
+  </div>
+</div>
+
+<script>
+class ParticleSystem {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.particles = [];
+    this.animationId = null;
+  }
+  resize(w, h) { this.canvas.width = w; this.canvas.height = h; }
+  burst(x, y, color) {
+    for (let i = 0; i < 16; i++) {
+      this.particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 6,
+        vy: (Math.random() - 0.5) * 6,
+        life: 1.0,
+        decay: Math.random() * 0.03 + 0.02,
+        size: Math.random() * 3 + 2,
+        color
+      });
+    }
+    if (!this.animationId) this.update();
+  }
+  update() {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= p.decay;
+      if (p.life <= 0) {
+        this.particles.splice(i, 1);
+        continue;
+      }
+      this.ctx.globalAlpha = p.life;
+      this.ctx.fillStyle = p.color;
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+    if (this.particles.length > 0) {
+      this.animationId = requestAnimationFrame(() => this.update());
+    } else {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
+    }
+  }
+}
+
+class GoEngine {
+  constructor(size = 9) {
+    this.size = size;
+    this.reset();
+  }
+
+  reset() {
+    this.board = Array(this.size).fill().map(() => Array(this.size).fill(0)); // 0: empty, 1: Black, 2: White
+    this.turn = 1; // 1: Black, 2: White
+    this.captures = { 1: 0, 2: 0 };
+    this.history = [];
+    this.koBoard = null;
+    this.consecutivePasses = 0;
+    this.lastMove = null;
+  }
+
+  getOpponent(player) { return player === 1 ? 2 : 1; }
+
+  isValidCoord(r, c) { return r >= 0 && r < this.size && c >= 0 && c < this.size; }
+
+  getNeighbors(r, c) {
+    const list = [];
+    const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr, nc = c + dc;
+      if (this.isValidCoord(nr, nc)) list.push({ r: nr, c: nc });
+    }
+    return list;
+  }
+
+  getGroupAndLiberties(startR, startC, testBoard = this.board) {
+    const player = testBoard[startR][startC];
+    if (player === 0) return { stones: [], liberties: 0 };
+
+    const stones = [];
+    const liberties = new Set();
+    const visited = Array(this.size).fill().map(() => Array(this.size).fill(false));
+    const queue = [{ r: startR, c: startC }];
+    visited[startR][startC] = true;
+
+    while (queue.length > 0) {
+      const { r, c } = queue.shift();
+      stones.push({ r, c });
+
+      for (const nb of this.getNeighbors(r, c)) {
+        const val = testBoard[nb.r][nb.c];
+        if (val === 0) {
+          liberties.add(`${nb.r},${nb.c}`);
+        } else if (val === player && !visited[nb.r][nb.c]) {
+          visited[nb.r][nb.c] = true;
+          queue.push(nb);
+        }
+      }
+    }
+    return { stones, liberties: liberties.size };
+  }
+
+  cloneBoard(board = this.board) {
+    return board.map(row => [...row]);
+  }
+
+  boardsEqual(b1, b2) {
+    if (!b1 || !b2) return false;
+    for (let r = 0; r < this.size; r++) {
+      for (let c = 0; c < this.size; c++) {
+        if (b1[r][c] !== b2[r][c]) return false;
+      }
+    }
+    return true;
+  }
+
+  playMove(r, c) {
+    if (!this.isValidCoord(r, c) || this.board[r][c] !== 0) {
+      return { success: false, reason: "Intersection occupied" };
+    }
+
+    const player = this.turn;
+    const opponent = this.getOpponent(player);
+    const testBoard = this.cloneBoard();
+    testBoard[r][c] = player;
+
+    let capturedTotal = [];
+    for (const nb of this.getNeighbors(r, c)) {
+      if (testBoard[nb.r][nb.c] === opponent) {
+        const group = this.getGroupAndLiberties(nb.r, nb.c, testBoard);
+        if (group.liberties === 0) {
+          capturedTotal.push(...group.stones);
+        }
+      }
+    }
+
+    // Remove captured stones on simulation board
+    for (const stone of capturedTotal) {
+      testBoard[stone.r][stone.c] = 0;
+    }
+
+    // Check suicide rule
+    const ownGroup = this.getGroupAndLiberties(r, c, testBoard);
+    if (ownGroup.liberties === 0 && capturedTotal.length === 0) {
+      return { success: false, reason: "Suicide move is forbidden" };
+    }
+
+    // Check Ko rule
+    if (this.koBoard && this.boardsEqual(testBoard, this.koBoard)) {
+      return { success: false, reason: "Ko rule prevents repeating state" };
+    }
+
+    // Move is valid -> apply permanently
+    this.koBoard = capturedTotal.length === 1 ? this.cloneBoard() : null;
+    this.board = testBoard;
+    this.captures[player] += capturedTotal.length;
+    this.consecutivePasses = 0;
+    this.lastMove = { r, c };
+    this.history.push({ r, c, player, captured: capturedTotal });
+    this.turn = opponent;
+
+    return { success: true, captured: capturedTotal };
+  }
+
+  pass() {
+    this.consecutivePasses++;
+    this.turn = this.getOpponent(this.turn);
+    this.lastMove = null;
+    return this.consecutivePasses >= 2; // Game finished if two passes in a row
+  }
+}
+
+class GoRenderer {
+  constructor(canvas, engine, particleSystem) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.engine = engine;
+    this.particleSystem = particleSystem;
+    this.cellSize = 40;
+    this.padding = 24;
+    this.initCanvas();
+    this.setupEvents();
+  }
+
+  initCanvas() {
+    const totalDim = Math.min(window.innerWidth * 0.9, 480);
+    this.padding = totalDim / 18;
+    this.cellSize = (totalDim - this.padding * 2) / (this.engine.size - 1);
+    this.canvas.width = totalDim;
+    this.canvas.height = totalDim;
+    this.particleSystem.resize(totalDim, totalDim);
+    this.draw();
+  }
+
+  setupEvents() {
+    const handleAction = (x, y) => {
+      const col = Math.round((x - this.padding) / this.cellSize);
+      const row = Math.round((y - this.padding) / this.cellSize);
+      if (this.engine.isValidCoord(row, col)) {
+        const res = this.engine.playMove(row, col);
+        if (res.success) {
+          if (res.captured && res.captured.length > 0) {
+            for (const s of res.captured) {
+              const sx = this.padding + s.c * this.cellSize;
+              const sy = this.padding + s.r * this.cellSize;
+              this.particleSystem.burst(sx, sy, '#f59e0b');
+            }
+          }
+          this.draw();
+          updateUIState();
+        } else {
+          document.getElementById('gameStatus').textContent = `⚠️ ${res.reason}`;
+        }
+      }
+    };
+
+    this.canvas.addEventListener('click', (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      handleAction(e.clientX - rect.left, e.clientY - rect.top);
+    });
+
+    this.canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const rect = this.canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      handleAction(touch.clientX - rect.left, touch.clientY - rect.top);
+    }, { passive: false });
+  }
+
+  getStarPoints() {
+    const s = this.engine.size;
+    if (s === 19) return [{r:3,c:3},{r:3,c:9},{r:3,c:15},{r:9,c:3},{r:9,c:9},{r:9,c:15},{r:15,c:3},{r:15,c:9},{r:15,c:15}];
+    if (s === 13) return [{r:3,c:3},{r:3,c:9},{r:6,c:6},{r:9,c:3},{r:9,c:9}];
+    if (s === 9) return [{r:2,c:2},{r:2,c:6},{r:4,c:4},{r:6,c:2},{r:6,c:6}];
+    return [];
+  }
+
+  draw() {
+    const { width, height } = this.canvas;
+    const ctx = this.ctx;
+
+    // Wood background
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--board-wood').trim() || '#dcb35c';
+    ctx.fillRect(0, 0, width, height);
+
+    // Grid lines
+    ctx.strokeStyle = '#452b14';
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < this.engine.size; i++) {
+      const coord = this.padding + i * this.cellSize;
+      // Horizontal
+      ctx.beginPath();
+      ctx.moveTo(this.padding, coord);
+      ctx.lineTo(width - this.padding, coord);
+      ctx.stroke();
+      // Vertical
+      ctx.beginPath();
+      ctx.moveTo(coord, this.padding);
+      ctx.lineTo(coord, height - this.padding);
+      ctx.stroke();
+    }
+
+    // Star points (Hoshi)
+    ctx.fillStyle = '#452b14';
+    for (const pt of this.getStarPoints()) {
+      ctx.beginPath();
+      ctx.arc(this.padding + pt.c * this.cellSize, this.padding + pt.r * this.cellSize, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Stones
+    const stoneRadius = this.cellSize * 0.46;
+    for (let r = 0; r < this.engine.size; r++) {
+      for (let c = 0; c < this.engine.size; c++) {
+        const val = this.engine.board[r][c];
+        if (val !== 0) {
+          const cx = this.padding + c * this.cellSize;
+          const cy = this.padding + r * this.cellSize;
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, stoneRadius, 0, Math.PI * 2);
+          ctx.shadowColor = 'rgba(0,0,0,0.45)';
+          ctx.shadowBlur = 6;
+          ctx.shadowOffsetY = 3;
+
+          const grad = ctx.createRadialGradient(cx - stoneRadius * 0.3, cy - stoneRadius * 0.3, stoneRadius * 0.1, cx, cy, stoneRadius);
+          if (val === 1) { // Black
+            grad.addColorStop(0, '#555');
+            grad.addColorStop(1, '#111');
+          } else { // White
+            grad.addColorStop(0, '#ffffff');
+            grad.addColorStop(1, '#dcdcdc');
+          }
+          ctx.fillStyle = grad;
+          ctx.fill();
+          ctx.restore();
+
+          // Last move indicator
+          if (this.engine.lastMove && this.engine.lastMove.r === r && this.engine.lastMove.c === c) {
+            ctx.strokeStyle = val === 1 ? '#e2e8f0' : '#0f172a';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, stoneRadius * 0.45, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+      }
+    }
+  }
+}
+
+// Global instances
+let engine = new GoEngine(9);
+let particleSystem = new ParticleSystem(document.getElementById('particleCanvas'));
+let renderer = new GoRenderer(document.getElementById('goBoard'), engine, particleSystem);
+let currentThemeIdx = 0;
+
+function updateUIState() {
+  const turnColor = engine.turn === 1 ? "Black" : "White";
+  const colorHex = engine.turn === 1 ? "#38bdf8" : "#f1f5f9";
+  const el = document.getElementById('currentTurnText');
+  el.textContent = turnColor;
+  el.style.color = colorHex;
+
+  document.getElementById('blackCaptures').textContent = engine.captures[1];
+  document.getElementById('whiteCaptures').textContent = engine.captures[2];
+  document.getElementById('moveCount').textContent = engine.history.length;
+  document.getElementById('gameStatus').textContent = `${turnColor}'s turn.`;
+}
+
+function setBoardSize(size) {
+  engine = new GoEngine(size);
+  renderer.engine = engine;
+  ['btn-size-9','btn-size-13','btn-size-19'].forEach(id => document.getElementById(id).classList.remove('active'));
+  document.getElementById(`btn-size-${size}`).classList.add('active');
+  renderer.initCanvas();
+  updateUIState();
+}
+
+function passTurn() {
+  const finished = engine.pass();
+  renderer.draw();
+  updateUIState();
+  if (finished) {
+    document.getElementById('gameStatus').textContent = "🏁 Both players passed. Match concluded!";
+    alert("Match finished by consecutive passes. Final captures:\nBlack: " + engine.captures[1] + "\nWhite: " + engine.captures[2]);
+  } else {
+    document.getElementById('gameStatus').textContent = "Player passed turn.";
+  }
+}
+
+function resetGame() {
+  engine.reset();
+  renderer.draw();
+  updateUIState();
+}
+
+function toggleTheme() {
+  const themes = ['', 'dark', 'slate'];
+  currentThemeIdx = (currentThemeIdx + 1) % themes.length;
+  document.documentElement.setAttribute('data-theme', themes[currentThemeIdx]);
+  renderer.draw();
+}
+
+function toggleMultiplayer() {
+  const sec = document.getElementById('multiplayerSection');
+  sec.style.display = (sec.style.display === 'none' || !sec.style.display) ? 'block' : 'none';
+}
+
+function createRoom() {
+  const id = Math.random().toString(36).substring(2, 7).toUpperCase();
+  document.getElementById('roomInfo').textContent = `Room ID: ${id} (Waiting for Opponent)`;
+  alert(`Arena Created! Share code: ${id}`);
+}
+
+function joinRoom() {
+  const id = prompt("Enter Room ID:");
+  if (id) {
+    document.getElementById('roomInfo').textContent = `Connected to Arena: ${id.toUpperCase()}`;
+    alert(`Connected to Room ${id.toUpperCase()}! You play White.`);
+  }
+}
+
+async function toggleWallet() {
+  const btn = document.getElementById('walletButton');
+  const provider = (window.phantom && window.phantom.solana) || window.solana;
+  if (!provider) {
+    alert("No Solana wallet extension detected. Running with Local Arcade Profile.");
+    return;
+  }
+  try {
+    const res = await provider.connect();
+    const pk = res.publicKey.toString();
+    document.getElementById('walletStatus').textContent = "Profile: Linked";
+    document.getElementById('walletAddress').textContent = `${pk.slice(0,4)}...${pk.slice(-4)}`;
+    document.getElementById('walletAddress').style.display = 'block';
+    btn.textContent = "Unlink Profile";
+  } catch (err) {
+    console.error("Link error:", err);
+  }
+}
+
+window.addEventListener('resize', () => renderer.initCanvas());
+updateUIState();
+</script>
+</body>
+</html>
