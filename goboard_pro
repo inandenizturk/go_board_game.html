@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoBoard Arena — Decentralized P2P Strategy Engine</title>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/@solana/web3.js@1.98.4/lib/index.iife.min.js"></script>
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #020617 100%);
+            --glass-bg: rgba(255, 255, 255, 0.07);
+            --glass-strong: rgba(0, 0, 0, 0.35);
+            --border-color: rgba(255, 255, 255, 0.12);
+            --accent: #38bdf8;
+            --board-wood: #dcb35c;
+        }
+        [data-theme="void"] {
+            --bg-gradient: linear-gradient(135deg, #18181b 0%, #171717 50%, #000000 100%);
+            --board-wood: #c9ad6a;
+        }
+        [data-theme="nebula"] {
+            --bg-gradient: linear-gradient(135deg, #1e1b4b 0%, #0f172a 50%, #020617 100%);
+            --board-wood: #d4b16a;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg-gradient);
+            background-attachment: fixed;
+            color: #f8fafc;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 1380px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+        }
+        .glass-strong {
+            background: var(--glass-strong);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--border-color);
+            border-radius: 18px;
+        }
+
+        /* Üst Başlık ve Profil */
+        .header-bar {
+            padding: 14px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .brand-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #38bdf8, #4f46e5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        .brand-text h1 { font-size: 18px; font-weight: 700; }
+        .brand-text p { font-size: 10px; opacity: 0.6; letter-spacing: 0.5px; }
+
+        .header-actions { display: flex; gap: 8px; }
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border-color);
+            color: #fff;
+            padding: 7px 14px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        button:hover { background: rgba(255, 255, 255, 0.18); }
+        button.active { background: #fff; color: #000; border-color: #fff; }
+        button.btn-primary { background: linear-gradient(135deg, #0284c7, #0369a1); border: none; }
+        button.btn-accent { background: rgba(14, 165, 233, 0.2); border-color: rgba(56, 189, 248, 0.4); color: #38bdf8; }
+
+        /* Bilgi Şeridi */
+        .banner-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 8px;
+        }
+        .banner-pill {
+            background: rgba(14, 165, 233, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* P2P Bar */
+        .p2p-panel {
+            padding: 12px 16px;
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.4);
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* 3 Sütunlu Ana Grid */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 280px 1fr 310px;
+            gap: 14px;
+            align-items: start;
+        }
+
+        /* Sol Sütun: Geçmiş */
+        .history-card {
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            height: 560px;
+        }
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.25);
+            border-radius: 10px;
+            padding: 8px;
+            margin: 10px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 8px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.03);
+            font-size: 11px;
+        }
+
+        /* Orta: Tahta */
+        .board-card {
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .board-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .board-canvas-wrap {
+            position: relative;
+            width: 100%;
+            max-width: 580px;
+            aspect-ratio: 1/1;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+            border-radius: 12px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        canvas { width: 100%; height: 100%; display: block; }
+        .particles-layer { position: absolute; inset: 0; pointer-events: none; }
+
+        /* Sağ: Durum ve Kontroller */
+        .status-col {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .stat-box {
+            padding: 12px;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.25);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .stat-row { display: flex; justify-content: space-between; font-size: 12px; margin-top: 4px; }
+        .stat-badge { font-size: 18px; font-weight: 700; margin-top: 4px; }
+
+        @media (max-width: 1024px) {
+            .main-grid { grid-template-columns: 1fr; }
+            .history-card { order: 2; height: 320px; }
+            .status-col { order: 3; }
+            .banner-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <!-- Üst Bar -->
+    <div class="glass header-bar">
+        <div class="header-top">
+            <div class="brand">
+                <div class="brand-icon">⚫</div>
+                <div class="brand-text">
+                    <h1>GoBoard Arena</h1>
+                    <p>DECENTRALIZED P2P STRATEGY ENGINE</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button onclick="cycleTheme()">🎨 Theme</button>
+                <button id="walletBtn" onclick="toggleWallet()">Link Profile</button>
+            </div>
+        </div>
+
+        <div class="banner-grid">
+            <div class="banner-pill">
+                <span>✨</span>
+                <span><strong>Engine:</strong> BFS liberties, capture, ko rule, flood-fill area scoring & P2P sync.</span>
+            </div>
+            <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
+                <button onclick="setBoardSize(9)" id="btn-size-9">9×9 Speed</button>
+                <button onclick="setBoardSize(13)" id="btn-size-13">13×13 Mid</button>
+                <button onclick="setBoardSize(19)" id="btn-size-19" class="active">19×19 Pro</button>
+                <button onclick="loadPuzzle()" class="btn-accent">🎯 Puzzle</button>
+                <button onclick="toggleP2PMenu()">👥 P2P Arena</button>
+            </div>
+        </div>
+
+        <!-- P2P Bağlantı Kutusu -->
+        <div class="p2p-panel" id="p2pPanel">
+            <div>
+                <div id="p2pStatusText" style="font-weight: 700; color: #f59e0b; font-size: 12px;">WebRTC Standby</div>
+                <div id="p2pDetails" style="font-size: 11px; opacity: 0.7; font-family: monospace;">Host or connect with code</div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+                <button onclick="hostP2PMatch()" class="active">🏠 Host Match</button>
+                <button onclick="joinP2PMatch()">🚪 Join with Code</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3 Sütun Düzeni -->
+    <div class="main-grid">
+        <!-- SOL: Hamle Geçmişi -->
+        <div class="glass-strong history-card">
+            <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 12px;">
+                <span>📜 Move History</span>
+                <span id="moveCountPill" style="padding: 2px 8px; border-radius: 20px; background: rgba(255,255,255,0.1); font-size: 10px;">0 moves</span>
+            </div>
+            <div class="history-list" id="historyList">
+                <div style="font-size: 11px; opacity: 0.5; padding: 10px;">No moves recorded yet. Black starts.</div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                <button onclick="undoMove()">↩️ Undo</button>
+                <button onclick="passTurn()">🚩 Pass</button>
+            </div>
+        </div>
+
+        <!-- ORTA: Canvas Tahta -->
+        <div class="glass-strong board-card">
+            <div class="board-header">
+                <span id="turnIndicatorText" style="color: #38bdf8;">Black to play — select intersection</span>
+                <div style="display: flex; gap: 6px;">
+                    <button onclick="calculateScore()" class="btn-accent">📊 Score</button>
+                    <button onclick="resetBoard()">Clear</button>
+                </div>
+            </div>
+
+            <div class="board-canvas-wrap" id="canvasWrapper">
+                <canvas id="goCanvas"></canvas>
+                <canvas id="particleCanvas" class="particles-layer"></canvas>
+            </div>
+
+            <div style="font-size: 10px; opacity: 0.6; display: flex; gap: 10px;">
+                <span>Komi: 6.5</span>
+                <span>•</span>
+                <span>Rule: Ko Enforced</span>
+                <span>•</span>
+                <span>Ghost Preview Enabled</span>
+            </div>
+        </div>
+
+        <!-- SAĞ: Durum & Profil -->
+        <div class="status-col">
+            <div class="glass-strong stat-box">
+                <div style="font-size: 11px; opacity: 0.6; text-transform: uppercase;">Decentralized ID</div>
+                <div id="profileAddress" style="font-size: 13px; font-weight: 700; margin-top: 4px; font-family: monospace;">Guest (Sandbox)</div>
+                <div style="font-size: 10px; opacity: 0.5; margin-top: 2px;">Web3 Auth / No transaction needed</div>
+            </div>
+
+            <div class="glass-strong stat-box">
+                <div style="font-size: 11px; opacity: 0.6; text-transform: uppercase;">Current Turn</div>
+                <div id="currentTurnBox" style="font-size: 15px; font-weight: 700; color: #38bdf8; margin-top: 4px;">⚫ Black's Move</div>
+                <div id="subStatusText" style="font-size: 11px; opacity: 0.7; margin-top: 2px;">Awaiting placement</div>
+            </div>
+
+            <div class="glass-strong stat-box" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div>
+                    <div style="font-size: 10px; opacity: 0.6;">Black Captures</div>
+                    <div class="stat-badge" id="blackCapCount">0</div>
+                </div>
+                <div>
+                    <div style="font-size: 10px; opacity: 0.6;">White Captures</div>
+                    <div class="stat-badge" id="whiteCapCount">0</div>
+                </div>
+            </div>
+
+            <button onclick="calculateScore()" class="btn-primary" style="padding: 10px; font-size: 13px;">
+                📊 Calculate Territory & Score
+            </button>
+
+            <div class="glass-strong stat-box" style="font-size: 11px; opacity: 0.75; line-height: 1.5;">
+                <strong>How to play:</strong> Stones with zero liberties are captured. Suicide moves are forbidden. Ko prevents repeating the exact board state.
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- GO ENGINE ---
+    class GoEngine {
+        constructor(size = 19) {
+            this.size = size;
+            this.komi = 6.5;
+            this.reset();
+        }
+        reset() {
+            this.board = Array(this.size).fill(0).map(() => Array(this.size).fill(0));
+            this.turn = 1; // 1: Black, 2: White
+            this.captures = { 1: 0, 2: 0 };
+            this.history = [];
+            this.koBoard = null;
+            this.consecutivePasses = 0;
+            this.lastMove = null;
+        }
+        getOpponent(p) { return p === 1 ? 2 : 1; }
+        isValidCoord(r, c) { return r >= 0 && r < this.size && c >= 0 && c < this.size; }
+        getNeighbors(r, c) {
+            const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+            const res = [];
+            for (const [dr, dc] of dirs) {
+                const nr = r + dr, nc = c + dc;
+                if (this.isValidCoord(nr, nc)) res.push({ r: nr, c: nc });
+            }
+            return res;
+        }
+        getGroupAndLiberties(r, c, b = this.board) {
+            const p = b[r][c];
+            if (p === 0) return { stones: [], liberties: 0 };
+            const stones = [];
+            const liberties = new Set();
+            const visited = Array(this.size).fill(0).map(() => Array(this.size).fill(false));
+            const q = [{ r, c }];
+            visited[r][c] = true;
+
+            while (q.length > 0) {
+                const curr = q.shift();
+                stones.push(curr);
+                for (const nb of this.getNeighbors(curr.r, curr.c)) {
+                    const val = b[nb.r][nb.c];
+                    if (val === 0) {
+                        liberties.add(`${nb.r},${nb.c}`);
+                    } else if (val === p && !visited[nb.r][nb.c]) {
+                        visited[nb.r][nb.c] = true;
+                        q.push(nb);
+                    }
+                }
+            }
+            return { stones, liberties: liberties.size };
+        }
+        cloneBoard(b = this.board) { return b.map(row => [...row]); }
+        boardsEqual(b1, b2) {
+            if (!b1 || !b2) return false;
+            for (let r = 0; r < this.size; r++) {
+                for (let c = 0; c < this.size; c++) {
+                    if (b1[r][c] !== b2[r][c]) return false;
+                }
+            }
+            return true;
+        }
+        playMove(r, c) {
+            if (!this.isValidCoord(r, c) || this.board[r][c] !== 0) {
+                return { success: false, reason: "Occupied intersection" };
+            }
+            const player = this.turn;
+            const opponent = this.getOpponent(player);
+            const test = this.cloneBoard();
+            test[r][c] = player;
+
+            let captured = [];
+            for (const nb of this.getNeighbors(r, c)) {
+                if (test[nb.r][nb.c] === opponent) {
+                    const grp = this.getGroupAndLiberties(nb.r, nb.c, test);
+                    if (grp.liberties === 0) captured.push(...grp.stones);
+                }
+            }
+            for (const s of captured) test[s.r][s.c] = 0;
+
+            if (this.getGroupAndLiberties(r, c, test).liberties === 0 && captured.length === 0) {
+                return { success: false, reason: "Suicide move is forbidden" };
+            }
+            if (this.koBoard && this.boardsEqual(test, this.koBoard)) {
+                return { success: false, reason: "Ko rule prevents repeat" };
+            }
+
+            this.history.push({
+                board: this.cloneBoard(),
+                turn: this.turn,
+                captures: { ...this.captures },
+                koBoard: this.koBoard ? this.cloneBoard(this.koBoard) : null,
+                lastMove: this.lastMove ? { ...this.lastMove } : null
+            });
+
+            this.koBoard = captured.length === 1 ? this.cloneBoard() : null;
+            this.board = test;
+            this.captures[player] += captured.length;
+            this.consecutivePasses = 0;
+            this.lastMove = { r, c };
+            this.turn = opponent;
+            return { success: true, captured };
+        }
+        undo() {
+            if (this.history.length === 0) return false;
+            const prev = this.history.pop();
+            this.board = prev.board;
+            this.turn = prev.turn;
+            this.captures = prev.captures;
+            this.koBoard = prev.koBoard;
+            this.lastMove = prev.lastMove;
+            this.consecutivePasses = 0;
+            return true;
+        }
+        pass() {
+            this.history.push({
+                board: this.cloneBoard(),
+                turn: this.turn,
+                captures: { ...this.captures },
+                koBoard: this.koBoard ? this.cloneBoard(this.koBoard) : null,
+                lastMove: this.lastMove ? { ...this.lastMove } : null
+            });
+            this.consecutivePasses++;
+            this.turn = this.getOpponent(this.turn);
+            this.lastMove = null;
+            return this.consecutivePasses >= 2;
+        }
+        scoreGame() {
+            const visited = Array(this.size).fill(0).map(() => Array(this.size).fill(false));
+            const territory = { 1: 0, 2: 0 };
+            for (let r = 0; r < this.size; r++) {
+                for (let c = 0; c < this.size; c++) {
+                    if (this.board[r][c] === 0 && !visited[r][c]) {
+                        const q = [{ r, c }];
+                        visited[r][c] = true;
+                        const region = [];
+                        const borders = new Set();
+                        while (q.length > 0) {
+                            const curr = q.shift();
+                            region.push(curr);
+                            for (const nb of this.getNeighbors(curr.r, curr.c)) {
+                                const val = this.board[nb.r][nb.c];
+                                if (val === 0) {
+                                    if (!visited[nb.r][nb.c]) {
+                                        visited[nb.r][nb.c] = true;
+                                        q.push(nb);
+                                    }
+                                } else {
+                                    borders.add(val);
+                                }
+                            }
+                        }
+                        if (borders.size === 1) {
+                            const owner = borders.values().next().value;
+                            territory[owner] += region.length;
+                        }
+                    }
+                }
+            }
+            const totalBlack = territory[1] + this.captures[1];
+            const totalWhite = territory[2] + this.captures[2] + this.komi;
+            return {
+                territory,
+                captures: this.captures,
+                komi: this.komi,
+                totalBlack,
+                totalWhite,
+                winner: totalBlack > totalWhite ? "Black" : "White",
+                diff: Math.abs(totalBlack - totalWhite).toFixed(1)
+            };
+        }
+    }
+
+    // --- PARTICLE SYSTEM ---
+    class ParticleSystem {
+        constructor(canvas) {
+            this.canvas = canvas;
+            this.ctx = canvas.getContext('2d');
+            this.particles = [];
+            this.animId = null;
+        }
+        resize(w, h) { this.canvas.width = w; this.canvas.height = h; }
+        burst(x, y, color = "#f59e0b") {
+            for (let i = 0; i < 20; i++) {
+                this.particles.push({
+                    x, y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    life: 1.0,
+                    decay: Math.random() * 0.03 + 0.02,
+                    size: Math.random() * 3 + 2,
+                    color
+                });
+            }
+            if (!this.animId) this.loop();
+        }
+        loop = () => {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            for (let i = this.particles.length - 1; i >= 0; i--) {
+                const p = this.particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= p.decay;
+                if (p.life <= 0) {
+                    this.particles.splice(i, 1);
+                    continue;
+                }
+                this.ctx.globalAlpha = p.life;
+                this.ctx.fillStyle = p.color;
+                this.ctx.beginPath();
+                this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+            if (this.particles.length > 0) {
+                this.animId = requestAnimationFrame(this.loop);
+            } else {
+                cancelAnimationFrame(this.animId);
+                this.animId = null;
+            }
+        }
+    }
+
+    // --- RENDERER & INTERACTION ---
+    const goCanvas = document.getElementById('goCanvas');
+    const particleCanvas = document.getElementById('particleCanvas');
+    const canvasWrap = document.getElementById('canvasWrapper');
+
+    let engine = new GoEngine(19);
+    let particles = new ParticleSystem(particleCanvas);
+    let hoverCoord = null;
+    let moveHistory = [];
+
+    // P2P State
+    let peer = null;
+    let p2pConn = null;
+    let p2pRole = null; // 1: Host (Black), 2: Guest (White)
+
+    function initCanvasDimensions() {
+        const size = canvasWrap.clientWidth;
+        goCanvas.width = size;
+        goCanvas.height = size;
+        particles.resize(size, size);
+        drawBoard();
+    }
+
+    function getHoshiPoints(s) {
+        if (s === 19) return [{r:3,c:3},{r:3,c:9},{r:3,c:15},{r:9,c:3},{r:9,c:9},{r:9,c:15},{r:15,c:3},{r:15,c:9},{r:15,c:15}];
+        if (s === 13) return [{r:3,c:3},{r:3,c:9},{r:6,c:6},{r:9,c:3},{r:9,c:9}];
+        if (s === 9) return [{r:2,c:2},{r:2,c:6},{r:4,c:4},{r:6,c:2},{r:6,c:6}];
+        return [];
+    }
+
+    function drawBoard() {
+        const ctx = goCanvas.getContext('2d');
+        const w = goCanvas.width;
+        const padding = w / (engine.size > 13 ? 22 : 16);
+        const cell = (w - padding * 2) / (engine.size - 1);
+
+        // Tahta zemin
+        const wood = getComputedStyle(document.documentElement).getPropertyValue('--board-wood').trim() || '#dcb35c';
+        ctx.fillStyle = wood;
+        ctx.fillRect(0, 0, w, w);
+
+        // Izgara çizgileri
+        ctx.strokeStyle = "rgba(69, 43, 20, 0.9)";
+        ctx.lineWidth = engine.size > 13 ? 1.0 : 1.4;
+        for (let i = 0; i < engine.size; i++) {
+            const p = padding + i * cell;
+            ctx.beginPath();
+            ctx.moveTo(padding, p); ctx.lineTo(w - padding, p); ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(p, padding); ctx.lineTo(p, w - padding); ctx.stroke();
+        }
+
+        // Yıldız (Hoshi) noktaları
+        ctx.fillStyle = "#2a1a0a";
+        const hoshiRad = engine.size > 13 ? 2.8 : 3.5;
+        for (const pt of getHoshiPoints(engine.size)) {
+            ctx.beginPath();
+            ctx.arc(padding + pt.c * cell, padding + pt.r * cell, hoshiRad, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        const stoneRad = cell * 0.47;
+
+        // Hover önizleme taşı
+        if (hoverCoord && engine.board[hoverCoord.r][hoverCoord.c] === 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(padding + hoverCoord.c * cell, padding + hoverCoord.r * cell, stoneRad, 0, Math.PI * 2);
+            ctx.fillStyle = engine.turn === 1 ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.5)";
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // Taşlar
+        for (let r = 0; r < engine.size; r++) {
+            for (let c = 0; c < engine.size; c++) {
+                const val = engine.board[r][c];
+                if (val !== 0) {
+                    const cx = padding + c * cell;
+                    const cy = padding + r * cell;
+
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, stoneRad, 0, Math.PI * 2);
+                    ctx.shadowColor = "rgba(0,0,0,0.45)";
+                    ctx.shadowBlur = engine.size > 13 ? 4 : 6;
+                    ctx.shadowOffsetY = 2;
+
+                    const grad = ctx.createRadialGradient(cx - stoneRad * 0.3, cy - stoneRad * 0.3, stoneRad * 0.1, cx, cy, stoneRad);
+                    if (val === 1) {
+                        grad.addColorStop(0, '#555'); grad.addColorStop(1, '#111');
+                    } else {
+                        grad.addColorStop(0, '#ffffff'); grad.addColorStop(1, '#d8d8d8');
+                    }
+                    ctx.fillStyle = grad;
+                    ctx.fill();
+                    ctx.restore();
+
+                    // Son hamle işaretçisi
+                    if (engine.lastMove && engine.lastMove.r === r && engine.lastMove.c === c) {
+                        ctx.strokeStyle = val === 1 ? "#38bdf8" : "#f59e0b";
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, stoneRad * 0.4, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+    }
+
+    function getCoordFromEvent(e) {
+        const rect = goCanvas.getBoundingClientRect();
+        const scale = goCanvas.width / rect.width;
+        const x = (e.clientX - rect.left) * scale;
+        const y = (e.clientY - rect.top) * scale;
+        const padding = goCanvas.width / (engine.size > 13 ? 22 : 16);
+        const cell = (goCanvas.width - padding * 2) / (engine.size - 1);
+        const c = Math.round((x - padding) / cell);
+        const r = Math.round((y - padding) / cell);
+        return { r, c };
+    }
+
+    canvasWrap.addEventListener('mousemove', (e) => {
+        const { r, c } = getCoordFromEvent(e);
+        if (engine.isValidCoord(r, c) && engine.board[r][c] === 0) {
+            hoverCoord = { r, c };
+        } else {
+            hoverCoord = null;
+        }
+        drawBoard();
+    });
+
+    canvasWrap.addEventListener('mouseleave', () => {
+        hoverCoord = null;
+        drawBoard();
+    });
+
+    canvasWrap.addEventListener('click', (e) => {
+        if (p2pRole && p2pRole !== engine.turn) {
+            alert("Wait for your turn!");
+            return;
+        }
+        const { r, c } = getCoordFromEvent(e);
+        executeMove(r, c, true);
+    });
+
+    function executeMove(r, c, sendSync = false) {
+        if (!engine.isValidCoord(r, c)) return;
+        const turnNow = engine.turn;
+        const res = engine.playMove(r, c);
+
+        if (res.success) {
+            // Particle efekti
+            if (res.captured.length > 0) {
+                const padding = goCanvas.width / (engine.size > 13 ? 22 : 16);
+                const cell = (goCanvas.width - padding * 2) / (engine.size - 1);
+                for (const s of res.captured) {
+                    particles.burst(padding + s.c * cell, padding + s.r * cell);
+                }
+            }
+
+            // Geçmişe ekle
+            const letters = "ABCDEFGHJKLMNOPQRST";
+            const label = `${letters[c]}${engine.size - r}`;
+            moveHistory.push({
+                num: moveHistory.length + 1,
+                player: turnNow,
+                label,
+                captured: res.captured.length
+            });
+
+            hoverCoord = null;
+            drawBoard();
+            updateUI();
+
+            if (sendSync && p2pConn && p2pConn.open) {
+                p2pConn.send({ type: 'move', r, c });
+            }
+        } else {
+            document.getElementById('subStatusText').textContent = `⚠️ ${res.reason}`;
+        }
+    }
+
+    function updateUI() {
+        const isBlack = engine.turn === 1;
+        const turnColorName = isBlack ? "Black" : "White";
+        document.getElementById('turnIndicatorText').textContent = `${turnColorName} to play — tap intersection`;
+        document.getElementById('currentTurnBox').textContent = isBlack ? "⚫ Black's Move" : "⚪ White's Move";
+        document.getElementById('currentTurnBox').style.color = isBlack ? "#38bdf8" : "#f1f5f9";
+        document.getElementById('blackCapCount').textContent = engine.captures[1];
+        document.getElementById('whiteCapCount').textContent = engine.captures[2];
+        document.getElementById('moveCountPill').textContent = `${moveHistory.length} moves`;
+
+        // Geçmiş listesini yenile
+        const listEl = document.getElementById('historyList');
+        if (moveHistory.length === 0) {
+            listEl.innerHTML = '<div style="font-size: 11px; opacity: 0.5; padding: 10px;">No moves yet.</div>';
+        } else {
+            listEl.innerHTML = moveHistory.slice().reverse().map(m => `
+        <div class="history-item">
+          <span>#${m.num} <strong>${m.player === 1 ? '⚫ B' : '⚪ W'}</strong> ${m.label}</span>
+          ${m.captured > 0 ? `<span style="color:#f59e0b;">+${m.captured} cap</span>` : ''}
+        </div>
+      `).join('');
+        }
+    }
+
+    function undoMove(sendSync = true) {
+        if (engine.undo()) {
+            moveHistory.pop();
+            drawBoard();
+            updateUI();
+            if (sendSync && p2pConn && p2pConn.open) p2pConn.send({ type: 'undo' });
+        }
+    }
+
+    function passTurn(sendSync = true) {
+        const isEnd = engine.pass();
+        drawBoard();
+        updateUI();
+        if (sendSync && p2pConn && p2pConn.open) p2pConn.send({ type: 'pass' });
+
+        if (isEnd) {
+            calculateScore();
+        } else {
+            document.getElementById('subStatusText').textContent = "Turn passed to opponent.";
+        }
+    }
+
+    function calculateScore() {
+        const s = engine.scoreGame();
+        alert(`🏁 GAME OVER — SCORE REPORT\n\n⚫ Black:\nTerritory: ${s.territory[1]}\nCaptures: ${s.captures[1]}\nTotal: ${s.totalBlack}\n\n⚪ White:\nTerritory: ${s.territory[2]}\nCaptures: ${s.captures[2]}\nKomi: ${s.komi}\nTotal: ${s.totalWhite}\n\n🏆 Winner: ${s.winner} by ${s.diff} points!`);
+    }
+
+    function setBoardSize(sz) {
+        engine = new GoEngine(sz);
+        moveHistory = [];
+        ['btn-size-9', 'btn-size-13', 'btn-size-19'].forEach(id => document.getElementById(id).classList.remove('active'));
+        document.getElementById(`btn-size-${sz}`).classList.add('active');
+        initCanvasDimensions();
+        updateUI();
+    }
+
+    function resetBoard() {
+        engine.reset();
+        moveHistory = [];
+        drawBoard();
+        updateUI();
+    }
+
+    function loadPuzzle() {
+        setBoardSize(19);
+        engine.board[3][15] = 2;
+        engine.board[2][15] = 1;
+        engine.board[4][15] = 1;
+        engine.board[3][14] = 1;
+        engine.turn = 1;
+        drawBoard();
+        updateUI();
+        document.getElementById('subStatusText').textContent = "🎯 Puzzle: Capture the white stone at P17!";
+    }
+
+    // --- P2P WEBRTC LOGIC ---
+    function toggleP2PMenu() {
+        const p = document.getElementById('p2pPanel');
+        p.style.display = p.style.display === 'flex' ? 'none' : 'flex';
+    }
+
+    function initPeerInstance(callback) {
+        if (peer) { callback(); return; }
+        peer = new Peer();
+        peer.on('open', (id) => {
+            document.getElementById('p2pDetails').textContent = `Your ID: ${id}`;
+            callback();
+        });
+        peer.on('connection', (conn) => {
+            p2pConn = conn;
+            p2pRole = 1; // Host = Black
+            bindConnectionEvents("Black (Host)");
+        });
+    }
+
+    function bindConnectionEvents(roleName) {
+        document.getElementById('p2pStatusText').textContent = `Connected! You play as ${roleName}`;
+        p2pConn.on('data', (data) => {
+            if (data.type === 'move') executeMove(data.r, data.c, false);
+            if (data.type === 'undo') undoMove(false);
+            if (data.type === 'pass') passTurn(false);
+        });
+    }
+
+    function hostP2PMatch() {
+        initPeerInstance(() => {
+            navigator.clipboard.writeText(peer.id);
+            alert(`Arena ID copied to clipboard!\nShare this code with your friend:\n${peer.id}`);
+        });
+    }
+
+    function joinP2PMatch() {
+        initPeerInstance(() => {
+            const code = prompt("Enter Host Arena ID:");
+            if (code) {
+                p2pConn = peer.connect(code.trim());
+                p2pRole = 2; // Guest = White
+                p2pConn.on('open', () => {
+                    bindConnectionEvents("White (Guest)");
+                });
+            }
+        });
+    }
+
+    // --- THEME & WALLET ---
+    const themes = ['', 'void', 'nebula'];
+    let curThemeIdx = 0;
+    function cycleTheme() {
+        curThemeIdx = (curThemeIdx + 1) % themes.length;
+        document.documentElement.setAttribute('data-theme', themes[curThemeIdx]);
+        drawBoard();
+    }
+
+    async function toggleWallet() {
+        const provider = window.phantom?.solana || window.solana;
+        if (!provider) {
+            alert("No Solana wallet extension found. Running in Guest Sandbox mode.");
+            return;
+        }
+        try {
+            const res = await provider.connect();
+            const pk = res.publicKey.toString();
+            document.getElementById('profileAddress').textContent = `${pk.slice(0,4)}...${pk.slice(-4)}`;
+            document.getElementById('walletBtn').textContent = "Linked";
+        } catch(err) {
+            console.error(err);
+        }
+    }
+
+    window.addEventListener('resize', initCanvasDimensions);
+    window.addEventListener('load', () => {
+        initCanvasDimensions();
+        updateUI();
+    });
+</script>
+</body>
+</html>
